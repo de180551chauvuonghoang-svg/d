@@ -1,0 +1,65 @@
+export interface AccountInfo {
+  login: number;
+  server: string;
+  balance: number;
+  equity: number;
+  floating_profit: number;
+  margin: number;
+  margin_free: number;
+  leverage: number;
+}
+
+export interface MarketTicker {
+  symbol: string;
+  bid: number;
+  ask: number;
+  spread: number;
+}
+
+export interface OpenPosition {
+  ticket: number;
+  type: 'BUY' | 'SELL';
+  volume: number;
+  entry_price: number;
+  entry_time: string;
+  sl: number;
+  tp: number;
+  current_price: number;
+  profit: number;
+  profit_points: number;
+  is_breakeven: boolean;
+}
+
+export interface AIAnalysis {
+  time?: string;
+  rsi_7?: number;
+  rsi_14?: number;
+  bb_pct_b?: number;
+  adx_14?: number;
+  trend?: 'BULLISH' | 'BEARISH' | 'NEUTRAL';
+  squeeze_on?: boolean;
+  liquidity_sweep_bull?: boolean;
+  liquidity_sweep_bear?: boolean;
+  prob_buy?: number;
+  prob_sell?: number;
+  signal_buy?: boolean;
+  signal_sell?: boolean;
+}
+
+export interface SystemLog {
+  time: string;
+  level: 'INFO' | 'WARNING' | 'ERROR' | 'SUCCESS' | 'TRADE';
+  message: string;
+}
+
+export interface WebSocketPayload {
+  timestamp: string;
+  bot_running: boolean;
+  market_open: boolean;
+  market_status_message: string;
+  account: AccountInfo;
+  ticker: MarketTicker;
+  positions: OpenPosition[];
+  analysis: AIAnalysis;
+  logs: SystemLog[];
+}
