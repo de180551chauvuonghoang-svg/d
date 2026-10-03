@@ -129,12 +129,45 @@ class XAUUSDLiveBot:
         else:
             print(f"[Cảnh báo] Dời SL lệnh #{ticket} thất bại: {res.comment} (Code: {res.retcode})")
 
+    def is_market_open_vn(self) -> tuple:
+        """
+        Kiểm tra trạng thái thị trường Vàng (XAUUSD) theo giờ Việt Nam (UTC+7):
+        - Đóng cửa cuối tuần: Từ ~05:00 sáng Thứ Bảy đến ~05:00 sáng Thứ Hai.
+        - Mở cửa: Từ 05:00 sáng Thứ Hai đến 05:00 sáng Thứ Bảy (24/5 liên tục).
+        """
+        now = datetime.datetime.now()
+        weekday = now.weekday()  # 0=T2, 1=T3, 2=T4, 3=T5, 4=T6, 5=T7, 6=CN
+        hour = now.hour
+        
+        # Thứ Bảy từ 05h00 sáng trở đi
+        if weekday == 5 and hour >= 5:
+            return False, "Hôm nay là Thứ Bảy (theo giờ VN). Thị trường Vàng quốc tế đang đóng cửa nghỉ cuối tuần."
+            
+        # Chủ Nhật cả ngày
+        if weekday == 6:
+            return False, "Hôm nay là Chủ Nhật (theo giờ VN). Thị trường Vàng quốc tế đang đóng cửa nghỉ cuối tuần."
+            
+        # Rạng sáng Thứ Hai trước 05h00 sáng
+        if weekday == 0 and hour < 5:
+            return False, "Rạng sáng Thứ Hai (trước 05:00 sáng giờ VN). Thị trường Vàng chưa mở phiên tuần mới."
+            
+        return True, "Thị trường Vàng đang mở cửa giao dịch."
+
     def tick_cycle(self):
         """Chu kỳ kiểm tra nến và xử lý tín hiệu"""
-        # 1. Cập nhật và bảo vệ các lệnh đang mở
+        # 1. Kiểm tra lịch thị trường (Nghỉ Thứ Bảy & Chủ Nhật theo giờ Việt Nam)
+        is_open, msg = self.is_market_open_vn()
+        if not is_open:
+            now_str = datetime.datetime.now().strftime("%Y-%m-%d %H:%M:%S")
+            print(f"[{now_str}] [CHẾ ĐỘ CHỜ / STANDBY] {msg}")
+            print("                --> Bot sẽ tự động thức dậy và bắt đầu quét lệnh ngay khi thị trường mở cửa vào rạng sáng Thứ Hai (~05:00 - 06:00 giờ VN)!\n")
+            time.sleep(27)  # Ngủ thêm để kiểm tra mỗi 30s khi thị trường đóng cửa
+            return
+
+        # 2. Cập nhật và bảo vệ các lệnh đang mở
         self.manage_active_positions()
         
-        # 2. Kiểm tra số lượng lệnh đang mở
+        # 3. Kiểm tra số lượng lệnh đang mở
         open_pos = self.get_open_bot_positions()
         if len(open_pos) >= self.config.MAX_OPEN_POSITIONS:
             return  # Đang có lệnh chạy, không mở thêm để đảm bảo an toàn vốn

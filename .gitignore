@@ -5,3 +5,4 @@ __pycache__/
 .vscode/
 .idea/
 *.log
+dashboard/node_modules/
