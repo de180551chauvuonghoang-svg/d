@@ -175,6 +175,12 @@ def startup_event():
     else:
         state.add_log("WARNING", "Chưa tìm thấy mô hình AI, vui lòng huấn luyện lại!")
 
+    # TỰ ĐỘNG BẬT BOT KHI KHỞI CHẠY (1-Click Autostart)
+    state.bot_running = True
+    state.bot_thread = threading.Thread(target=bot_worker_loop, daemon=True)
+    state.bot_thread.start()
+    state.add_log("SUCCESS", "Hệ thống đã TỰ ĐỘNG KÍCH HOẠT Bot Trade và kết nối trực tiếp với MT5!")
+
 @app.on_event("shutdown")
 def shutdown_event():
     state.bot_running = False
