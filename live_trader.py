@@ -184,45 +184,45 @@ class XAUUSDLiveBot:
                 self.open_trade(mt5.ORDER_TYPE_SELL, sym_info.bid, sym_info)
 
     def open_trade(self, order_type: int, price: float, sym_info):
-        """Mở lệnh thị trường với Stop Loss và Take Profit gắn liền"""
+        """Mở cụm 3 lệnh đa mục tiêu (TP1: 12p, TP2: 22p, TP3: 35p) với SL chung và quản lý Breakeven đồng bộ"""
         point = sym_info.point
-        lot = self.config.FIXED_LOT
+        is_buy = (order_type == mt5.ORDER_TYPE_BUY)
+        type_str = "BUY" if is_buy else "SELL"
+        init_sl = round(price - (self.config.SL_POINTS * point), 2) if is_buy else round(price + (self.config.SL_POINTS * point), 2)
         
-        if order_type == mt5.ORDER_TYPE_BUY:
-            sl = round(price - (self.config.SL_POINTS * point), 2)
-            tp = round(price + (self.config.TP_POINTS * point), 2)
-            type_str = "BUY"
-        else:
-            sl = round(price + (self.config.SL_POINTS * point), 2)
-            tp = round(price - (self.config.TP_POINTS * point), 2)
-            type_str = "SELL"
+        tiers = [
+            ("TIER 1 (Scalp 12p)", self.config.TIER1_LOT, self.config.TIER1_TP_POINTS),
+            ("TIER 2 (Standard 22p)", self.config.TIER2_LOT, self.config.TIER2_TP_POINTS),
+            ("TIER 3 (Runner 35p)", self.config.TIER3_LOT, self.config.TIER3_TP_POINTS),
+        ]
+        
+        for name, lot, tp_pts in tiers:
+            tp_price = round(price + (tp_pts * point), 2) if is_buy else round(price - (tp_pts * point), 2)
             
-        request = {
-            "action": mt5.TRADE_ACTION_DEAL,
-            "symbol": self.config.SYMBOL,
-            "volume": lot,
-            "type": order_type,
-            "price": price,
-            "sl": sl,
-            "tp": tp,
-            "deviation": self.config.SLIPPAGE,
-            "magic": self.config.MAGIC_NUMBER,
-            "comment": f"AI Scalper {type_str}",
-            "type_time": mt5.ORDER_TIME_GTC,
-            "type_filling": mt5.ORDER_FILLING_IOC,
-        }
-        
-        res = mt5.order_send(request)
-        if res.retcode == mt5.TRADE_RETCODE_DONE:
-            print(f"==> [KHỚP LỆNH] {type_str} {lot} lot tại {price:.2f} | SL: {sl:.2f} | TP: {tp:.2f} | Order ID: #{res.order}")
-        else:
-            # Thử lại với ORDER_FILLING_RETURN nếu sàn yêu cầu
-            request["type_filling"] = mt5.ORDER_FILLING_RETURN
-            res2 = mt5.order_send(request)
-            if res2.retcode == mt5.TRADE_RETCODE_DONE:
-                print(f"==> [KHỚP LỆNH] {type_str} {lot} lot tại {price:.2f} | SL: {sl:.2f} | TP: {tp:.2f} | Order ID: #{res2.order}")
+            request = {
+                "action": mt5.TRADE_ACTION_DEAL,
+                "symbol": self.config.SYMBOL,
+                "volume": lot,
+                "type": order_type,
+                "price": price,
+                "sl": init_sl,
+                "tp": tp_price,
+                "deviation": self.config.SLIPPAGE,
+                "magic": self.config.MAGIC_NUMBER,
+                "comment": f"AI Scalper {name}",
+                "type_time": mt5.ORDER_TIME_GTC,
+                "type_filling": mt5.ORDER_FILLING_IOC,
+            }
+            
+            res = mt5.order_send(request)
+            if res.retcode != mt5.TRADE_RETCODE_DONE:
+                request["type_filling"] = mt5.ORDER_FILLING_RETURN
+                res = mt5.order_send(request)
+                
+            if res.retcode == mt5.TRADE_RETCODE_DONE:
+                print(f"==> [KHỚP LỆNH] {name}: {type_str} {lot} lot tại {price:.2f} | SL: {init_sl} | TP: {tp_price} | Ticket #{res.order}")
             else:
-                print(f"[LỖI ĐẶT LỆNH] Mã lỗi: {res.retcode}, Chi tiết: {res.comment}")
+                print(f"[LỖI ĐẶT LỆNH] {name}: Mã lỗi {res.retcode}, Chi tiết: {res.comment}")
 
 if __name__ == "__main__":
     bot = XAUUSDLiveBot()
