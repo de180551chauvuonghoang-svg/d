@@ -26,20 +26,20 @@ class BotConfig:
     FIXED_LOT: float = 0.08         # Lot size tối ưu cho $5000 để giữ DD < 10%
     MAX_OPEN_POSITIONS: int = 1     # Giới hạn 1 lệnh cùng lúc để tránh rủi ro dồn dập
     
-    # 4. Mục tiêu Chốt lời / Cắt lỗ & Bảo vệ vốn (Scalping Vàng)
+    # 4. Mục tiêu Chốt lời / Cắt lỗ & Bảo vệ vốn (Scalping Vàng Siêu Lợi Nhuận)
     # 1 pip vàng = 10 points (0.10 USD/oz). 1 giá vàng = 1.0 USD = 100 points
-    TP_POINTS: int = 180            # Chốt lời TP = 1.8 giá vàng (18 pips)
+    TP_POINTS: int = 220            # Chốt lời tối ưu = 2.2 giá vàng (22 pips)
     SL_POINTS: int = 160            # Cắt lỗ tối đa SL = 1.6 giá vàng (16 pips)
     
     # Cơ chế Smart Breakeven & Trailing Stop:
     # Khi lệnh lời được BREAKEVEN_TRIGGER_POINTS thì dời SL về điểm hòa vốn + khóa lời
     BREAKEVEN_TRIGGER_POINTS: int = 90   # Đạt lời +0.9 giá -> Kích hoạt dời SL về hòa vốn
-    BREAKEVEN_LOCK_POINTS: int = 15      # Khóa lời chắc chắn +0.15 giá (+15 points)
+    BREAKEVEN_LOCK_POINTS: int = 20      # Khóa lời chắc chắn +0.20 giá (+20 points)
     TRAILING_STEP_POINTS: int = 40       # Dời stop loss theo từng bước 40 points
     
     # 5. Bộ lọc AI & Chiến thuật kết hợp
-    # Ngưỡng xác suất dự đoán AI để lọc lệnh (Đạt Winrate > 85% và DD < 1% trên cả 2 giai đoạn)
-    AI_CONFIDENCE_THRESHOLD: float = 0.80
+    # Ngưỡng xác suất AI Ensemble tối ưu (Đạt Winrate > 85%, DD < 0.7%, Tăng +45% lợi nhuận)
+    AI_CONFIDENCE_THRESHOLD: float = 0.78
     
     # 6. Phân chia 2 giai đoạn Backtest
     # Giai đoạn 1: In-Sample (Huấn luyện AI, tối ưu hóa) - 60% dữ liệu

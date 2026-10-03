@@ -1,5 +1,5 @@
 """
-ML Feature Pipeline and Labeling Engine
+Advanced ML Feature Pipeline and Target Labeling Engine 2.0
 """
 import pandas as pd
 import numpy as np
@@ -7,13 +7,15 @@ from typing import List
 from config import config
 
 DEFAULT_FEATURES: List[str] = [
-    'bb_pct_b', 'bb_width',
+    'bb_pct_b', 'bb_width', 'kc_squeeze',
     'rsi_7', 'rsi_14',
     'dist_ema_50', 'dist_ema_200',
+    'adx_14', 'atr_ratio',
+    'macd_hist_ratio',
     'stoch_k', 'stoch_d',
-    'atr_ratio',
     'body_ratio', 'upper_wick_ratio', 'lower_wick_ratio',
-    'hour', 'day_of_week'
+    'liquidity_sweep_bull', 'liquidity_sweep_bear',
+    'hour_sin', 'hour_cos', 'day_of_week'
 ]
 
 def generate_training_labels(

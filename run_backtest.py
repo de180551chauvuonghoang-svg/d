@@ -12,8 +12,8 @@ import numpy as np
 import matplotlib.pyplot as plt
 import os
 from data_loader import fetch_historical_rates
-from strategy import calculate_indicators
-from ai_model import AIScalperModel
+from src.strategies.composite import CompositeScalperStrategy
+from src.ml.ai_gatekeeper import AIGatekeeperModel
 from backtester import BacktestEngine
 from config import config
 
@@ -37,8 +37,9 @@ def main():
     print("[1/5] Đang tải dữ liệu lịch sử XAUUSD M5...")
     raw_df = fetch_historical_rates(count=35000)
     
-    print("[2/5] Đang tính toán các chỉ báo kỹ thuật đa chiến thuật...")
-    df = calculate_indicators(raw_df)
+    print("[2/5] Đang tính toán đa chiến thuật 4 động cơ (Mean Reversion, Pullback, SMC, Squeeze)...")
+    strategy = CompositeScalperStrategy()
+    df = strategy.generate_signals(raw_df)
     
     # Chia làm 2 giai đoạn:
     split_idx = int(len(df) * config.TRAIN_TEST_SPLIT_RATIO)
@@ -49,8 +50,8 @@ def main():
     print(f"  - Giai đoạn 1 (In-Sample) : {df_phase1['time'].iloc[0]} -> {df_phase1['time'].iloc[-1]} ({len(df_phase1)} nến)")
     print(f"  - Giai đoạn 2 (Out-of-Sample): {df_phase2['time'].iloc[0]} -> {df_phase2['time'].iloc[-1]} ({len(df_phase2)} nến)")
     
-    # Huấn luyện mô hình AI trên Giai đoạn 1
-    ai = AIScalperModel()
+    # Huấn luyện siêu mô hình AI Ensemble trên Giai đoạn 1
+    ai = AIGatekeeperModel()
     ai.train(df_phase1)
     
     # Chạy Backtest Giai đoạn 1

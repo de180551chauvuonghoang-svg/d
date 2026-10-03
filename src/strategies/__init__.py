@@ -1,3 +1,5 @@
 from src.strategies.mean_reversion import MeanReversionStrategy
 from src.strategies.trend_pullback import TrendPullbackStrategy
+from src.strategies.smc_liquidity import SMCLiquidityStrategy
+from src.strategies.squeeze_momentum import SqueezeMomentumStrategy
 from src.strategies.composite import CompositeScalperStrategy

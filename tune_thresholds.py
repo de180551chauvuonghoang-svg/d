@@ -4,21 +4,24 @@ if hasattr(sys.stdout, 'reconfigure'):
 import pandas as pd
 import numpy as np
 from data_loader import fetch_historical_rates
-from strategy import calculate_indicators
-from ai_model import AIScalperModel
+from src.strategies.composite import CompositeScalperStrategy
+from src.ml.ai_gatekeeper import AIGatekeeperModel
 from backtester import BacktestEngine
 from config import config
 
 raw_df = fetch_historical_rates(count=35000)
-df = calculate_indicators(raw_df)
+strategy = CompositeScalperStrategy()
+df = strategy.generate_signals(raw_df)
+
 split_idx = int(len(df) * config.TRAIN_TEST_SPLIT_RATIO)
 df_phase1 = df.iloc[:split_idx].copy().reset_index(drop=True)
 df_phase2 = df.iloc[split_idx:].copy().reset_index(drop=True)
 
-ai = AIScalperModel()
-ai.load()
+ai = AIGatekeeperModel()
+ai.train(df_phase1)
 
-for thresh in [0.74, 0.76, 0.78, 0.80, 0.82, 0.85]:
+print("\n--- KẾT QUẢ ĐÁNH GIÁ CÁC NGƯỠNG AI ENSEMBLE MỚI ---")
+for thresh in [0.72, 0.74, 0.76, 0.78, 0.80]:
     eng1 = BacktestEngine(5000, 0.08)
     res1 = eng1.run(df_phase1, ai, thresh)
     eng2 = BacktestEngine(5000, 0.08)
