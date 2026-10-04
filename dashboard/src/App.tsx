@@ -6,8 +6,14 @@ import {
 } from 'lucide-react';
 import type { WebSocketPayload } from './types';
 
-const WS_URL = 'ws://127.0.0.1:8000/ws';
-const API_URL = 'http://127.0.0.1:8000';
+// Tự động thích ứng môi trường Deploy (Localhost, Remote Cloud VPS IP, hoặc Vercel)
+const isBrowser = typeof window !== 'undefined';
+const protocol = isBrowser && window.location.protocol === 'https:' ? 'https:' : 'http:';
+const wsProtocol = isBrowser && window.location.protocol === 'https:' ? 'wss:' : 'ws:';
+const currentHost = isBrowser ? window.location.host : '127.0.0.1:8000';
+
+const API_URL = import.meta.env.VITE_API_URL || `${protocol}//${currentHost}`;
+const WS_URL = import.meta.env.VITE_WS_URL || `${wsProtocol}//${currentHost}/ws`;
 
 export function App() {
   const [data, setData] = useState<WebSocketPayload | null>(null);
