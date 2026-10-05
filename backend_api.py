@@ -71,6 +71,7 @@ class SystemState:
         self.last_feature_row: Optional[pd.DataFrame] = None
         self.closed_trades: List[Dict[str, Any]] = []
         self.known_positions: Dict[int, Any] = {}
+        self.last_traded_bar_time: Optional[str] = None
 
     def add_log(self, level: str, message: str):
         now_str = datetime.datetime.now().strftime("%H:%M:%S")
@@ -82,7 +83,7 @@ class SystemState:
 state = SystemState()
 
 def fetch_mt5_history_deals(limit: int = 50) -> List[Dict[str, Any]]:
-    """Lấy danh sách các lệnh đã chốt từ MT5 và bộ nhớ state thời gian thực"""
+    """Lấy danh sách các lệnh đã chốt thực tế từ MT5 (100% chuẩn xác theo server MetaTrader 5)"""
     deals_list = []
     try:
         from_t = datetime.datetime.now() - datetime.timedelta(days=7)
@@ -93,27 +94,40 @@ def fetch_mt5_history_deals(limit: int = 50) -> List[Dict[str, Any]]:
                 if not d.symbol:
                     continue
                 # entry == 1 là deal chốt đóng lệnh (ENTRY_OUT)
-                if d.entry == 1 or d.profit != 0:
-                    trade_type = "BUY" if d.type == 1 else "SELL"
+                if d.entry == 1:
+                    # Trong MT5: d.type == 0 (BUY) đóng vị thế SELL, d.type == 1 (SELL) đóng vị thế BUY
+                    orig_type = "SELL" if d.type == 0 else "BUY"
+                    comm = (d.comment or "").strip()
+                    
+                    # Xác định nhãn lý do đóng chuẩn xác
+                    if comm.startswith("[sl"):
+                        if d.profit > 0:
+                            reason = f"Khóa Lãi BE (+${d.profit:.2f})"
+                        else:
+                            reason = f"Cắt Lỗ SL ({comm})"
+                    elif comm.startswith("[tp"):
+                        reason = f"Chốt Lời TP ({comm})"
+                    elif d.profit > 0:
+                        reason = f"Chốt Lời (+${d.profit:.2f})"
+                    elif d.profit < 0:
+                        reason = f"Cắt Lỗ (-${abs(d.profit):.2f})"
+                    else:
+                        reason = "Hòa Vốn (BE)"
+
                     deals_list.append({
-                        "ticket": d.order,
+                        "ticket": d.position_id if d.position_id else d.order,
                         "deal_id": d.ticket,
                         "symbol": d.symbol,
-                        "type": trade_type,
+                        "type": orig_type,
                         "volume": d.volume,
                         "price": round(d.price, 2),
                         "profit": round(d.profit, 2),
                         "close_time": datetime.datetime.fromtimestamp(d.time).strftime("%H:%M:%S %d/%m"),
-                        "comment": d.comment or ("Chốt lời (TP)" if d.profit > 0 else "Cắt lỗ (SL)")
+                        "comment": reason
                     })
-    except Exception:
+    except Exception as e:
         pass
 
-    # Kết hợp các lệnh đóng được lưu trong bộ nhớ state
-    for ct in state.closed_trades:
-        if not any(d['ticket'] == ct['ticket'] for d in deals_list):
-            deals_list.append(ct)
-            
     return list(reversed(deals_list))[:limit]
 
 # ----------------- KIỂM TRA THỊ TRƯỜNG THEO GIỜ VN -----------------
@@ -316,38 +330,31 @@ def bot_worker_loop():
                             last_bar, prob_buy, prob_sell, sym_info, len(open_positions), is_open
                         )
                         
-                        # Kích hoạt mở cụm 3 lệnh nếu AI chấp thuận
-                        if last_bar.get('raw_signal_buy') and prob_buy >= config.AI_CONFIDENCE_THRESHOLD:
-                            state.add_log("TRADE", f"AI Duyệt BUY ({prob_buy*100:.1f}%)! Đang mở cụm 3 lệnh đa mục tiêu...")
-                            open_3tier_order(OrderType.BUY, sym_info.ask, sym_info)
-                            
-                        elif last_bar.get('raw_signal_sell') and prob_sell >= config.AI_CONFIDENCE_THRESHOLD:
-                            state.add_log("TRADE", f"AI Duyệt SELL ({prob_sell*100:.1f}%)! Đang mở cụm 3 lệnh đa mục tiêu...")
-                            open_3tier_order(OrderType.SELL, sym_info.bid, sym_info)
+                        # CANDLE LOCK: Mỗi nến M5 chỉ cho phép kích hoạt tối đa 1 cụm lệnh tín hiệu
+                        bar_time_str = str(last_bar['time'])
+                        can_trade_bar = (state.last_traded_bar_time != bar_time_str)
+
+                        # Kích hoạt mở cụm 3 lệnh nếu AI chấp thuận, đang KHÔNG có vị thế mở nào và nến này chưa vào lệnh
+                        if len(open_positions) == 0 and can_trade_bar:
+                            if last_bar.get('raw_signal_buy') and prob_buy >= config.AI_CONFIDENCE_THRESHOLD:
+                                state.last_traded_bar_time = bar_time_str
+                                state.add_log("TRADE", f"AI Duyệt BUY ({prob_buy*100:.1f}%) trên nến {bar_time_str}! Đang mở cụm 3 lệnh...")
+                                open_3tier_order(OrderType.BUY, sym_info.ask, sym_info)
+                                
+                            elif last_bar.get('raw_signal_sell') and prob_sell >= config.AI_CONFIDENCE_THRESHOLD:
+                                state.last_traded_bar_time = bar_time_str
+                                state.add_log("TRADE", f"AI Duyệt SELL ({prob_sell*100:.1f}%) trên nến {bar_time_str}! Đang mở cụm 3 lệnh...")
+                                open_3tier_order(OrderType.SELL, sym_info.bid, sym_info)
             elif sym_info and len(open_positions) >= config.MAX_OPEN_POSITIONS:
                 state.latest_prediction = calculate_trade_prediction(
                     None, 0.0, 0.0, sym_info, len(open_positions), is_open
                 )
 
-            # Theo dõi tự động các lệnh đã đóng để đưa vào lịch sử giao dịch (History)
+            # Dọn dẹp bộ nhớ theo dõi vị thế khi lệnh đã đóng trên MT5
             current_tickets = {p.ticket for p in open_positions}
             for t_id, kp in list(state.known_positions.items()):
                 if t_id not in current_tickets:
-                    close_p = sym_info.bid if kp['type'] == 'BUY' else sym_info.ask if sym_info else kp['price']
-                    pnl = (close_p - kp['price']) * kp['lot'] * 100 if kp['type'] == 'BUY' else (kp['price'] - close_p) * kp['lot'] * 100
-                    state.closed_trades.insert(0, {
-                        "ticket": t_id,
-                        "deal_id": t_id,
-                        "symbol": config.SYMBOL,
-                        "type": kp['type'],
-                        "volume": kp['lot'],
-                        "entry_price": kp['price'],
-                        "price": round(close_p, 2),
-                        "profit": round(pnl, 2),
-                        "close_time": datetime.datetime.now().strftime("%H:%M:%S %d/%m"),
-                        "comment": kp.get('name', 'AI Scalper')
-                    })
-                    state.add_log("SUCCESS", f"Lệnh #{t_id} ({kp['type']} {kp['lot']} lot) đã đóng. PnL: {pnl:+.2f} USD")
+                    state.add_log("INFO", f"Vị thế #{t_id} ({kp['type']} {kp['lot']} lot) đã đóng trên MT5.")
                     del state.known_positions[t_id]
                             
             time.sleep(3)
