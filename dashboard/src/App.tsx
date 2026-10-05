@@ -2,7 +2,7 @@ import { useState, useEffect, useRef } from 'react';
 import { 
   Play, Pause, AlertOctagon, TrendingUp, TrendingDown, Shield, 
   Activity, DollarSign, Wallet, Layers, CheckCircle2, 
-  Clock, Zap, Wifi, WifiOff, X, BarChart2
+  Clock, Zap, Wifi, WifiOff, X, BarChart2, Timer
 } from 'lucide-react';
 import type { WebSocketPayload } from './types';
 
@@ -105,9 +105,29 @@ export function App() {
     }
   };
 
+  // Thử nghiệm vào lệnh tức thì (BUY / SELL cụm 3 lệnh)
+  const handleTestEntry = async (direction: 'BUY' | 'SELL') => {
+    if (!window.confirm(`Xác nhận thử nghiệm mở ngay cụm 3 lệnh ${direction} trên MT5 để kiểm tra chức năng tự động?`)) return;
+    try {
+      setActionLoading(true);
+      const res = await fetch(`${API_URL}/api/trades/test-entry?direction=${direction}`, { method: 'POST' });
+      const result = await res.json();
+      if (res.ok) {
+        alert(`[THÀNH CÔNG] ${result.message} tại giá ${result.price}!`);
+      } else {
+        alert(`[THẤT BẠI] ${result.detail || 'Không thể mở lệnh'}`);
+      }
+    } catch (e) {
+      alert("Lỗi kết nối Backend API!");
+    } finally {
+      setActionLoading(false);
+    }
+  };
+
   const account = data?.account;
   const ticker = data?.ticker;
   const analysis = data?.analysis;
+  const prediction = data?.prediction;
   const positions = data?.positions || [];
   const logs = data?.logs || [];
   const isMarketOpen = data?.market_open ?? false;
@@ -337,6 +357,143 @@ export function App() {
             </div>
           </div>
 
+        </div>
+
+        {/* PREDICTOR & AUTO-ENTRY RADAR (DỰ ĐOÁN THỜI ĐIỂM VÀO LỆNH TIẾP THEO) */}
+        <div className="glass-panel" style={{ 
+          padding: '22px 26px', 
+          marginBottom: '24px',
+          background: 'linear-gradient(135deg, rgba(30, 41, 59, 0.7) 0%, rgba(15, 23, 42, 0.9) 100%)',
+          border: '1px solid rgba(255, 255, 255, 0.1)',
+          boxShadow: '0 8px 32px rgba(0, 0, 0, 0.25)',
+          display: 'grid',
+          gridTemplateColumns: '1.4fr 1.2fr 1fr',
+          gap: '24px',
+          alignItems: 'center'
+        }}>
+          {/* Cột 1: Thời gian ước tính & Đếm ngược nến M5 */}
+          <div>
+            <div style={{ display: 'flex', alignItems: 'center', gap: '8px', marginBottom: '8px' }}>
+              <Timer size={18} style={{ color: '#F59E0B' }} />
+              <span style={{ fontSize: '13px', fontWeight: 800, letterSpacing: '0.5px', color: '#F59E0B', textTransform: 'uppercase' }}>
+                Dự Đoán Thời Điểm Vào Lệnh (Next Trade Predictor)
+              </span>
+              <span style={{
+                background: prediction?.status_level === 'TRIGGER_IMMIMENT' ? 'rgba(16, 185, 129, 0.2)' : 'rgba(59, 130, 246, 0.15)',
+                color: prediction?.status_level === 'TRIGGER_IMMIMENT' ? '#10B981' : '#60A5FA',
+                border: `1px solid ${prediction?.status_level === 'TRIGGER_IMMIMENT' ? 'rgba(16, 185, 129, 0.4)' : 'rgba(59, 130, 246, 0.3)'}`,
+                padding: '2px 8px', borderRadius: '12px', fontSize: '11px', fontWeight: 700
+              }}>
+                Khung M5 XAUUSD
+              </span>
+            </div>
+
+            {/* Thời gian dự kiến lớn, nổi bật */}
+            <div className="mono" style={{ 
+              fontSize: '24px', fontWeight: 800, color: '#F8FAFC',
+              display: 'flex', alignItems: 'center', gap: '12px', marginTop: '4px'
+            }}>
+              <span>{prediction?.estimated_time || "Đang tính toán..."}</span>
+            </div>
+
+            {/* Mô tả trạng thái chi tiết */}
+            <p style={{ fontSize: '12px', color: '#94A3B8', marginTop: '6px', lineHeight: '1.4' }}>
+              {prediction?.status_text || "Đang theo dõi chu kỳ nén nến và xác suất hội tụ của 4 chiến thuật AI."}
+            </p>
+
+            {/* Đồng hồ đếm ngược nến M5 */}
+            <div style={{ display: 'inline-flex', alignItems: 'center', gap: '6px', marginTop: '10px', background: 'rgba(255, 255, 255, 0.05)', padding: '4px 10px', borderRadius: '6px', border: '1px solid rgba(255,255,255,0.08)' }}>
+              <Clock size={13} style={{ color: '#38BDF8' }} />
+              <span style={{ fontSize: '11px', color: '#94A3B8' }}>Đóng nến M5 sau:</span>
+              <strong className="mono" style={{ fontSize: '12px', color: '#38BDF8' }}>
+                {prediction?.bar_countdown || "05:00"}
+              </strong>
+            </div>
+          </div>
+
+          {/* Cột 2: Thanh tiến trình Sẵn Sàng Vào Lệnh & Checklist 4 Điều Kiện */}
+          <div style={{ borderLeft: '1px solid rgba(255,255,255,0.08)', borderRight: '1px solid rgba(255,255,255,0.08)', padding: '0 20px' }}>
+            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '8px' }}>
+              <span style={{ fontSize: '12px', fontWeight: 700, color: '#CBD5E1' }}>ĐỘ SẴN SÀNG VÀO LỆNH (READINESS)</span>
+              <span className="mono" style={{ 
+                fontSize: '16px', fontWeight: 800, 
+                color: (prediction?.readiness_pct || 0) >= 80 ? '#10B981' : ((prediction?.readiness_pct || 0) >= 50 ? '#F59E0B' : '#94A3B8') 
+              }}>
+                {prediction?.readiness_pct ?? 0}%
+              </span>
+            </div>
+
+            {/* Thanh tiến trình Readiness */}
+            <div style={{ height: '10px', background: 'rgba(255,255,255,0.08)', borderRadius: '6px', overflow: 'hidden' }}>
+              <div style={{
+                height: '100%',
+                width: `${Math.max(prediction?.readiness_pct || 5, 5)}%`,
+                background: (prediction?.readiness_pct || 0) >= 80 ? 
+                  'linear-gradient(90deg, #10B981 0%, #34D399 100%)' : 
+                  'linear-gradient(90deg, #F59E0B 0%, #FBBF24 100%)',
+                borderRadius: '6px',
+                transition: 'width 0.4s ease'
+              }} />
+            </div>
+
+            {/* Checklist 4 điều kiện cốt lõi */}
+            <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '8px', marginTop: '14px' }}>
+              <div style={{ display: 'flex', alignItems: 'center', gap: '6px', fontSize: '11px', color: prediction?.checklist?.market_open ? '#10B981' : '#EF4444' }}>
+                <CheckCircle2 size={13} />
+                <span>Thị trường Mở</span>
+              </div>
+              <div style={{ display: 'flex', alignItems: 'center', gap: '6px', fontSize: '11px', color: prediction?.checklist?.spread_ok ? '#10B981' : '#94A3B8' }}>
+                <CheckCircle2 size={13} />
+                <span>Spread an toàn</span>
+              </div>
+              <div style={{ display: 'flex', alignItems: 'center', gap: '6px', fontSize: '11px', color: prediction?.checklist?.confluence ? '#10B981' : '#94A3B8' }}>
+                <CheckCircle2 size={13} />
+                <span>4-Engine Signal</span>
+              </div>
+              <div style={{ display: 'flex', alignItems: 'center', gap: '6px', fontSize: '11px', color: prediction?.checklist?.ai_ready ? '#10B981' : '#94A3B8' }}>
+                <CheckCircle2 size={13} />
+                <span>AI Duyệt (&ge;78%)</span>
+              </div>
+            </div>
+          </div>
+
+          {/* Cột 3: Nút Test Trigger Vào Lệnh Tức Thì */}
+          <div style={{ display: 'flex', flexDirection: 'column', gap: '10px' }}>
+            <span style={{ fontSize: '11px', fontWeight: 700, color: '#94A3B8', textTransform: 'uppercase' }}>
+              ⚡ Thử Nghiệm Tự Động (Test Triggers)
+            </span>
+            <div style={{ display: 'flex', gap: '10px' }}>
+              <button
+                onClick={() => handleTestEntry('BUY')}
+                disabled={actionLoading}
+                style={{
+                  flex: 1, padding: '10px 12px', borderRadius: '8px', border: '1px solid rgba(16, 185, 129, 0.4)',
+                  background: 'rgba(16, 185, 129, 0.15)', color: '#10B981', fontWeight: 700, fontSize: '12px',
+                  cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '6px',
+                  transition: 'all 0.2s ease'
+                }}
+              >
+                <TrendingUp size={14} />
+                <span>TEST BUY</span>
+              </button>
+              <button
+                onClick={() => handleTestEntry('SELL')}
+                disabled={actionLoading}
+                style={{
+                  flex: 1, padding: '10px 12px', borderRadius: '8px', border: '1px solid rgba(239, 68, 68, 0.4)',
+                  background: 'rgba(239, 68, 68, 0.15)', color: '#EF4444', fontWeight: 700, fontSize: '12px',
+                  cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '6px',
+                  transition: 'all 0.2s ease'
+                }}
+              >
+                <TrendingDown size={14} />
+                <span>TEST SELL</span>
+              </button>
+            </div>
+            <span style={{ fontSize: '10px', color: '#64748B' }}>
+              * Bấm để mở ngay cụm 3 lệnh (TP1 12p, TP2 22p, TP3 35p) kiểm tra tự động dời SL Breakeven.
+            </span>
+          </div>
         </div>
 
         {/* 3. CENTER SPLIT GRID (Active Trades vs AI Analysis) */}

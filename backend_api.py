@@ -49,6 +49,23 @@ class SystemState:
         self.logs: List[Dict[str, Any]] = []
         self.max_logs: int = 150
         self.latest_analysis: Dict[str, Any] = {}
+        self.latest_prediction: Dict[str, Any] = {
+            "estimated_time": "Đang phân tích dữ liệu nến...",
+            "estimated_bars": 0,
+            "readiness_pct": 50,
+            "bar_countdown": "05:00",
+            "seconds_remaining": 300,
+            "best_prob": 0.0,
+            "target_prob": config.AI_CONFIDENCE_THRESHOLD,
+            "status_text": "Đang khởi tạo thuật toán và đồng bộ dữ liệu MT5.",
+            "status_level": "MONITORING",
+            "checklist": {
+                "market_open": True,
+                "spread_ok": True,
+                "confluence": False,
+                "ai_ready": False
+            }
+        }
         self.connected_websockets: List[WebSocket] = []
         self.bot_thread: Optional[threading.Thread] = None
 
@@ -75,6 +92,133 @@ def is_market_open_vn() -> tuple:
     return True, "Thị trường đang mở cửa"
 
 # ----------------- VÒNG LẶP GIAO DỊCH NỀN CỦA BOT -----------------
+def calculate_trade_prediction(last_bar, prob_buy: float, prob_sell: float, sym_info, open_pos_count: int, is_market_open: bool) -> dict:
+    """Thuật toán dự đoán thông minh thời gian tới lệnh kế tiếp dựa trên hội tụ kỹ thuật & AI"""
+    now = datetime.datetime.now()
+    secs_into_candle = (now.minute % 5) * 60 + now.second
+    secs_remaining = max(0, 300 - secs_into_candle)
+    bar_countdown_str = f"{secs_remaining // 60:02d}:{secs_remaining % 60:02d}"
+
+    if not is_market_open:
+        return {
+            "estimated_time": "Thị trường nghỉ giao dịch",
+            "estimated_bars": 0,
+            "readiness_pct": 0,
+            "bar_countdown": bar_countdown_str,
+            "seconds_remaining": secs_remaining,
+            "best_prob": 0.0,
+            "target_prob": config.AI_CONFIDENCE_THRESHOLD,
+            "status_text": "Thị trường đang đóng cửa cuối tuần. Tự động giao dịch khi mở phiên Thứ Hai.",
+            "status_level": "STANDBY",
+            "checklist": {
+                "market_open": False,
+                "spread_ok": False,
+                "confluence": False,
+                "ai_ready": False
+            }
+        }
+
+    if open_pos_count >= config.MAX_OPEN_POSITIONS:
+        return {
+            "estimated_time": "Đang có lệnh hoạt động",
+            "estimated_bars": 0,
+            "readiness_pct": 100,
+            "bar_countdown": bar_countdown_str,
+            "seconds_remaining": secs_remaining,
+            "best_prob": max(prob_buy, prob_sell),
+            "target_prob": config.AI_CONFIDENCE_THRESHOLD,
+            "status_text": f"Đang giữ {open_pos_count} vị thế đa mục tiêu (TP1/TP2/TP3). Đợi chốt lời hoặc cắt lỗ trước khi vào lệnh mới.",
+            "status_level": "ACTIVE_TRADE",
+            "checklist": {
+                "market_open": True,
+                "spread_ok": True,
+                "confluence": True,
+                "ai_ready": True
+            }
+        }
+
+    # Tính điểm sẵn sàng (Readiness Score 0 - 100)
+    readiness = 0
+    spread_ok = (sym_info.spread <= config.MAX_SPREAD) if sym_info else True
+    if spread_ok:
+        readiness += 10
+
+    rsi = float(last_bar.get('rsi_7', 50)) if last_bar is not None else 50.0
+    bb_pct_b = float(last_bar.get('bb_pct_b', 0.5)) if last_bar is not None else 0.5
+    sqz = bool(last_bar.get('kc_squeeze', 0) == 1) if last_bar is not None else False
+
+    # Độ lệch RSI tiến gần vùng quá bán (<35) hoặc quá mua (>65)
+    if rsi <= 35 or rsi >= 65:
+        readiness += 15
+    elif rsi <= 42 or rsi >= 58:
+        readiness += 8
+
+    # Dải Bollinger Bands nén hoặc chạm cận
+    if bb_pct_b <= 0.15 or bb_pct_b >= 0.85:
+        readiness += 15
+    elif bb_pct_b <= 0.30 or bb_pct_b >= 0.70:
+        readiness += 8
+
+    if sqz:
+        readiness += 10
+
+    raw_sig_buy = bool(last_bar.get('raw_signal_buy', False)) if last_bar is not None else False
+    raw_sig_sell = bool(last_bar.get('raw_signal_sell', False)) if last_bar is not None else False
+    confluence = raw_sig_buy or raw_sig_sell
+    if confluence:
+        readiness += 25
+
+    best_prob = max(prob_buy, prob_sell)
+    ai_points = min(25, int((best_prob / config.AI_CONFIDENCE_THRESHOLD) * 25))
+    readiness += ai_points
+    readiness = min(100, readiness)
+
+    ai_ready = best_prob >= config.AI_CONFIDENCE_THRESHOLD
+
+    if confluence and ai_ready:
+        est_time = f"~1 - 2 phút (Đóng nến: {bar_countdown_str})"
+        est_bars = 1
+        status_text = "Hội tụ đủ 4 chiến thuật & AI duyệt xác suất thắng! Sắp mở 3 lệnh khi nến M5 kết thúc."
+        status_level = "TRIGGER_IMMIMENT"
+    elif best_prob >= 0.70 or readiness >= 75:
+        est_time = "~5 - 15 phút (1 - 3 nến M5)"
+        est_bars = 2
+        status_text = f"Độ sẵn sàng cao ({readiness}%). Đang tích lũy setup và chờ AI đạt ngưỡng {config.AI_CONFIDENCE_THRESHOLD*100:.0f}%."
+        status_level = "VERY_CLOSE"
+    elif readiness >= 50 or best_prob >= 0.55:
+        est_time = "~15 - 35 phút (3 - 7 nến M5)"
+        est_bars = 5
+        status_text = "Giá đang tiến sát vùng kích hoạt (Overbought/Oversold/Squeeze). Đang theo dõi nén biên độ."
+        status_level = "APPROACHING"
+    elif readiness >= 30:
+        est_time = "~40 - 75 phút (8 - 15 nến M5)"
+        est_bars = 10
+        status_text = "Thị trường đang hình thành cấu trúc sóng. Chờ nhịp Pullback hoặc Breakout hợp lệ."
+        status_level = "WAITING"
+    else:
+        est_time = "~1.5 - 2.5 giờ (Tần suất chuẩn)"
+        est_bars = 25
+        status_text = "Thị trường đi ngang / Sideway nhẹ. Bot bảo vệ an toàn vốn, chỉ kích hoạt khi xác suất thắng cao."
+        status_level = "MONITORING"
+
+    return {
+        "estimated_time": est_time,
+        "estimated_bars": est_bars,
+        "readiness_pct": readiness,
+        "bar_countdown": bar_countdown_str,
+        "seconds_remaining": secs_remaining,
+        "best_prob": round(best_prob, 3),
+        "target_prob": config.AI_CONFIDENCE_THRESHOLD,
+        "status_text": status_text,
+        "status_level": status_level,
+        "checklist": {
+            "market_open": is_market_open,
+            "spread_ok": spread_ok,
+            "confluence": confluence,
+            "ai_ready": ai_ready
+        }
+    }
+
 def bot_worker_loop():
     """Luồng chạy nền tự động quét nến, bắt lệnh và quản lý Breakeven"""
     state.add_log("INFO", "Bot Trade Tự Động đã được KÍCH HOẠT.")
@@ -84,6 +228,7 @@ def bot_worker_loop():
             # 1. Kiểm tra thị trường cuối tuần
             is_open, msg = is_market_open_vn()
             if not is_open:
+                state.latest_prediction = calculate_trade_prediction(None, 0.0, 0.0, None, 0, False)
                 time.sleep(10)
                 continue
                 
@@ -126,6 +271,11 @@ def bot_worker_loop():
                             "signal_buy": bool(last_bar.get('raw_signal_buy', False)),
                             "signal_sell": bool(last_bar.get('raw_signal_sell', False))
                         }
+
+                        # Cập nhật dự đoán thời điểm vào lệnh tiếp theo
+                        state.latest_prediction = calculate_trade_prediction(
+                            last_bar, prob_buy, prob_sell, sym_info, len(open_positions), is_open
+                        )
                         
                         # Kích hoạt mở cụm 3 lệnh nếu AI chấp thuận
                         if last_bar.get('raw_signal_buy') and prob_buy >= config.AI_CONFIDENCE_THRESHOLD:
@@ -135,6 +285,10 @@ def bot_worker_loop():
                         elif last_bar.get('raw_signal_sell') and prob_sell >= config.AI_CONFIDENCE_THRESHOLD:
                             state.add_log("TRADE", f"AI Duyệt SELL ({prob_sell*100:.1f}%)! Đang mở cụm 3 lệnh đa mục tiêu...")
                             open_3tier_order(OrderType.SELL, sym_info.bid, sym_info)
+            elif sym_info and len(open_positions) >= config.MAX_OPEN_POSITIONS:
+                state.latest_prediction = calculate_trade_prediction(
+                    None, 0.0, 0.0, sym_info, len(open_positions), is_open
+                )
                             
             time.sleep(3)
         except Exception as e:
@@ -219,6 +373,7 @@ def get_system_status():
         "open_positions_count": len(open_pos),
         "ai_threshold": config.AI_CONFIDENCE_THRESHOLD,
         "analysis": state.latest_analysis,
+        "prediction": state.latest_prediction,
         "server_time": datetime.datetime.now().strftime("%Y-%m-%d %H:%M:%S")
     }
 
@@ -257,6 +412,28 @@ def toggle_bot():
         state.bot_thread.start()
     return {"bot_running": state.bot_running}
 
+@app.post("/api/trades/test-entry")
+def test_trade_entry(direction: str = "BUY"):
+    """Thử nghiệm vào ngay 1 cụm 3 lệnh (BUY hoặc SELL) để test chức năng tự động"""
+    sym_info = state.broker.get_symbol_info(config.SYMBOL)
+    if not sym_info:
+        raise HTTPException(status_code=500, detail="Không lấy được thông tin thị trường MT5")
+    
+    order_type = OrderType.BUY if direction.upper() == "BUY" else OrderType.SELL
+    price = sym_info.ask if order_type == OrderType.BUY else sym_info.bid
+    
+    state.add_log("TRADE", f"[TEST THỦ CÔNG] Yêu cầu test vào cụm 3 lệnh {order_type.value} tại giá {price:.2f}...")
+    open_3tier_order(order_type, price, sym_info)
+    
+    open_positions = state.broker.get_open_positions(config.SYMBOL)
+    return {
+        "status": "success",
+        "direction": direction.upper(),
+        "price": price,
+        "open_positions_count": len(open_positions),
+        "message": f"Đã gửi lệnh {direction.upper()} 3-Tier tới MT5"
+    }
+
 @app.post("/api/trades/close-all")
 def close_all_trades():
     positions = state.broker.get_open_positions(config.SYMBOL)
@@ -293,6 +470,16 @@ async def websocket_endpoint(websocket: WebSocket):
             sym_info = state.broker.get_symbol_info(config.SYMBOL)
             is_open, msg = is_market_open_vn()
             raw_pos = state.broker.get_open_positions(config.SYMBOL)
+            
+            # Tính toán đồng hồ đếm ngược nến M5 thời gian thực từng giây
+            now_dt = datetime.datetime.now()
+            secs_into_candle = (now_dt.minute % 5) * 60 + now_dt.second
+            secs_remaining = max(0, 300 - secs_into_candle)
+            bar_countdown_str = f"{secs_remaining // 60:02d}:{secs_remaining % 60:02d}"
+
+            pred_payload = dict(state.latest_prediction) if state.latest_prediction else {}
+            pred_payload["bar_countdown"] = bar_countdown_str
+            pred_payload["seconds_remaining"] = secs_remaining
             
             positions_list = []
             for p in raw_pos:
@@ -336,6 +523,7 @@ async def websocket_endpoint(websocket: WebSocket):
                 },
                 "positions": positions_list,
                 "analysis": state.latest_analysis,
+                "prediction": pred_payload,
                 "logs": state.logs[:25]
             }
             

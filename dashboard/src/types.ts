@@ -52,6 +52,24 @@ export interface SystemLog {
   message: string;
 }
 
+export interface TradePrediction {
+  estimated_time: string;
+  estimated_bars: number;
+  readiness_pct: number;
+  bar_countdown: string;
+  seconds_remaining: number;
+  best_prob: number;
+  target_prob: number;
+  status_text: string;
+  status_level: 'TRIGGER_IMMIMENT' | 'VERY_CLOSE' | 'APPROACHING' | 'WAITING' | 'MONITORING' | 'ACTIVE_TRADE' | 'STANDBY';
+  checklist: {
+    market_open: boolean;
+    spread_ok: boolean;
+    confluence: boolean;
+    ai_ready: boolean;
+  };
+}
+
 export interface WebSocketPayload {
   timestamp: string;
   bot_running: boolean;
@@ -61,5 +79,7 @@ export interface WebSocketPayload {
   ticker: MarketTicker;
   positions: OpenPosition[];
   analysis: AIAnalysis;
+  prediction?: TradePrediction;
   logs: SystemLog[];
 }
+
