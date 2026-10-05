@@ -7,6 +7,8 @@ import numpy as np
 from typing import List, Optional, Dict
 import os
 import joblib
+import warnings
+warnings.filterwarnings('ignore', category=UserWarning, module='sklearn')
 from sklearn.ensemble import RandomForestClassifier, HistGradientBoostingClassifier
 from sklearn.calibration import CalibratedClassifierCV
 from src.core.interfaces import BaseAIModel
