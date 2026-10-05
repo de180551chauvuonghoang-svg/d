@@ -141,7 +141,7 @@ def plot_3month_results(res: dict, monthly_df: pd.DataFrame, output_path: str = 
     
     # 3. Cơ cấu khớp lệnh đa mục tiêu (3-Tier & Breakeven)
     ax3 = fig.add_subplot(gs[1, 0])
-    categories = ['T1 (TP 12p)', 'T2 (TP 22p)', 'T3 (TP 35p)', 'Khóa Hòa Vốn BE', 'Cắt Lỗ SL']
+    categories = ['T1 (TP 18p)', 'T2 (TP 30p)', 'T3 (TP 45p)', 'Khóa Hòa Vốn BE', 'Cắt Lỗ SL']
     trades = res.get('trades', [])
     loss_count = len([t for t in trades if t.profit < 0])
     be_count = len([t for t in trades if t.exit_reason == 'BREAKEVEN'])
