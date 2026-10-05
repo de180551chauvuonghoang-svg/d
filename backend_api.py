@@ -365,15 +365,15 @@ def bot_worker_loop():
     state.add_log("WARNING", "Bot Trade Tự Động đã TẠM DỪNG.")
 
 def open_3tier_order(order_type: OrderType, price: float, sym_info):
-    """Mở cụm 3 lệnh con TP1 (12p), TP2 (22p), TP3 (35p)"""
+    """Mở cụm 3 lệnh con TP1 (18p), TP2 (30p), TP3 (45p)"""
     point = sym_info.point
     is_buy = (order_type == OrderType.BUY)
     init_sl = round(price - (config.SL_POINTS * point), 2) if is_buy else round(price + (config.SL_POINTS * point), 2)
     
     tiers = [
-        ("T1 (Scalp 12p)", config.TIER1_LOT, config.TIER1_TP_POINTS),
-        ("T2 (Standard 22p)", config.TIER2_LOT, config.TIER2_TP_POINTS),
-        ("T3 (Runner 35p)", config.TIER3_LOT, config.TIER3_TP_POINTS),
+        ("T1 (Scalp 18p)", config.TIER1_LOT, config.TIER1_TP_POINTS),
+        ("T2 (Standard 30p)", config.TIER2_LOT, config.TIER2_TP_POINTS),
+        ("T3 (Runner 45p)", config.TIER3_LOT, config.TIER3_TP_POINTS),
     ]
     
     for name, lot, tp_pts in tiers:

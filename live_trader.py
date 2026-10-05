@@ -217,16 +217,16 @@ class XAUUSDLiveBot:
                 self.open_trade(mt5.ORDER_TYPE_SELL, sym_info.bid, sym_info)
 
     def open_trade(self, order_type: int, price: float, sym_info):
-        """Mở cụm 3 lệnh đa mục tiêu (TP1: 12p, TP2: 22p, TP3: 35p) với SL chung và quản lý Breakeven đồng bộ"""
+        """Mở cụm 3 lệnh đa mục tiêu (TP1: 18p, TP2: 30p, TP3: 45p) với SL chung và quản lý Breakeven đồng bộ"""
         point = sym_info.point
         is_buy = (order_type == mt5.ORDER_TYPE_BUY)
         type_str = "BUY" if is_buy else "SELL"
         init_sl = round(price - (self.config.SL_POINTS * point), 2) if is_buy else round(price + (self.config.SL_POINTS * point), 2)
         
         tiers = [
-            ("TIER 1 (Scalp 12p)", self.config.TIER1_LOT, self.config.TIER1_TP_POINTS),
-            ("TIER 2 (Standard 22p)", self.config.TIER2_LOT, self.config.TIER2_TP_POINTS),
-            ("TIER 3 (Runner 35p)", self.config.TIER3_LOT, self.config.TIER3_TP_POINTS),
+            ("TIER 1 (Scalp 18p)", self.config.TIER1_LOT, self.config.TIER1_TP_POINTS),
+            ("TIER 2 (Standard 30p)", self.config.TIER2_LOT, self.config.TIER2_TP_POINTS),
+            ("TIER 3 (Runner 45p)", self.config.TIER3_LOT, self.config.TIER3_TP_POINTS),
         ]
         
         for name, lot, tp_pts in tiers:

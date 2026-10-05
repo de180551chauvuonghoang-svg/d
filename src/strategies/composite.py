@@ -90,7 +90,15 @@ class CompositeScalperStrategy(BaseStrategy):
         for strat in self.sub_strategies:
             data = strat.generate_signals(data)
             
-        # 12. Hợp nhất các tín hiệu gốc
+        # 12. Lọc bỏ cản tàu (Counter-Trend Filter) cho Mean Reversion:
+        # Nếu thị trường có sóng mạnh (ADX > 20) và nến trên EMA200, TUYỆT ĐỐI KHÔNG SELL Mean Reversion
+        if 'mr_signal_sell' in data.columns:
+            data['mr_signal_sell'] = data['mr_signal_sell'] & ~(data['trend_bullish'] & (data['adx_14'] > 20))
+        # Nếu thị trường có sóng giảm mạnh (ADX > 20) và nến dưới EMA200, TUYỆT ĐỐI KHÔNG BUY Mean Reversion
+        if 'mr_signal_buy' in data.columns:
+            data['mr_signal_buy'] = data['mr_signal_buy'] & ~(data['trend_bearish'] & (data['adx_14'] > 20))
+
+        # 13. Hợp nhất các tín hiệu gốc
         signal_buy_cols = [c for c in ['mr_signal_buy', 'tp_signal_buy', 'smc_signal_buy', 'sqz_signal_buy'] if c in data.columns]
         signal_sell_cols = [c for c in ['mr_signal_sell', 'tp_signal_sell', 'smc_signal_sell', 'sqz_signal_sell'] if c in data.columns]
         

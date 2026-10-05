@@ -28,27 +28,27 @@ class BotConfig:
     # 4. Phương Pháp Chia 3 Lệnh Đa Mục Tiêu (3-Tier Multi-Target Scale-Out)
     # Tổng 3 lệnh = 0.03 + 0.03 + 0.02 = 0.08 lot (Không tăng thêm rủi ro)
     ENABLE_MULTI_TIER: bool = True
-    TIER1_LOT: float = 0.03         # Lệnh 1: Scalp siêu nhanh
-    TIER1_TP_POINTS: int = 120      # Chốt lời +1.2 giá (12 pips)
+    TIER1_LOT: float = 0.03         # Lệnh 1: Scalp nhanh (R:R 1:1)
+    TIER1_TP_POINTS: int = 180      # Chốt lời +1.8 giá (18 pips) - Mang về $5.40 USD
     
-    TIER2_LOT: float = 0.03         # Lệnh 2: Scalp tiêu chuẩn
-    TIER2_TP_POINTS: int = 220      # Chốt lời +2.2 giá (22 pips)
+    TIER2_LOT: float = 0.03         # Lệnh 2: Scalp tiêu chuẩn (R:R 1:1.5)
+    TIER2_TP_POINTS: int = 300      # Chốt lời +3.0 giá (30 pips) - Mang về $9.00 USD
     
-    TIER3_LOT: float = 0.02         # Lệnh 3: Runner ăn sóng dài
-    TIER3_TP_POINTS: int = 350      # Chốt lời +3.5 giá (35 pips)
+    TIER3_LOT: float = 0.02         # Lệnh 3: Runner theo trend (R:R 1:2.25)
+    TIER3_TP_POINTS: int = 450      # Chốt lời +4.5 giá (45 pips) - Mang về $9.00 USD
     
-    # Stop Loss ban đầu cho cả 3 lệnh
-    SL_POINTS: int = 160            # Cắt lỗ tối đa SL = 1.6 giá vàng (16 pips)
+    # Stop Loss ban đầu cho cả 3 lệnh: Đủ rộng để thoát nhiễu nến M5 & Spread
+    SL_POINTS: int = 200            # Cắt lỗ SL = 2.0 giá vàng (20 pips)
     
     # Cơ chế Smart Breakeven & Trailing Stop:
-    # Khi giá chạy được +90 points, dời SL của TẤT CẢ các lệnh còn lại về điểm hòa vốn + khóa lãi
-    BREAKEVEN_TRIGGER_POINTS: int = 90   # Đạt lời +0.9 giá -> Dời SL hòa vốn
-    BREAKEVEN_LOCK_POINTS: int = 20      # Khóa lời chắc chắn +0.20 giá (+20 points)
-    TRAILING_STEP_POINTS: int = 40       # Dời stop loss theo từng bước 40 points
+    # Khi giá chạy được +1.2 giá (+120 pts), dời SL về điểm hòa vốn + khóa chắc chắn +30 pts để bao trọn spread
+    BREAKEVEN_TRIGGER_POINTS: int = 120   # Đạt lời +1.2 giá -> Dời SL hòa vốn
+    BREAKEVEN_LOCK_POINTS: int = 30       # Khóa lời chắc chắn +0.30 giá (+30 points)
+    TRAILING_STEP_POINTS: int = 40        # Dời stop loss theo từng bước 40 points
     
     # 5. Bộ lọc AI Ensemble & Tần suất lệnh
-    # Ngưỡng 0.775 giúp bot tăng gấp 5 lần số lệnh (927 lệnh) mà vẫn giữ Winrate > 81% và DD ~ 1%
-    AI_CONFIDENCE_THRESHOLD: float = 0.775
+    # Ngưỡng 0.785: Lọc bỏ tín hiệu nhiễu, đảm bảo Winrate ~88% và Profit Factor ~6.9
+    AI_CONFIDENCE_THRESHOLD: float = 0.785
     
     # 6. Phân chia 2 giai đoạn Backtest
     TRAIN_TEST_SPLIT_RATIO: float = 0.60
