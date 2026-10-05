@@ -2,7 +2,7 @@ import { useState, useEffect, useRef } from 'react';
 import { 
   Play, Pause, AlertOctagon, TrendingUp, TrendingDown, Shield, 
   Activity, DollarSign, Wallet, Layers, CheckCircle2, 
-  Clock, Zap, Wifi, WifiOff, X, BarChart2, Timer
+  Clock, Zap, Wifi, WifiOff, X, BarChart2, Timer, History, Radio
 } from 'lucide-react';
 import type { WebSocketPayload } from './types';
 
@@ -19,6 +19,7 @@ export function App() {
   const [data, setData] = useState<WebSocketPayload | null>(null);
   const [isConnected, setIsConnected] = useState<boolean>(false);
   const [actionLoading, setActionLoading] = useState<boolean>(false);
+  const [activeTab, setActiveTab] = useState<'active' | 'history'>('active');
   const wsRef = useRef<WebSocket | null>(null);
   const logContainerRef = useRef<HTMLDivElement | null>(null);
 
@@ -129,6 +130,7 @@ export function App() {
   const analysis = data?.analysis;
   const prediction = data?.prediction;
   const positions = data?.positions || [];
+  const history = data?.history || [];
   const logs = data?.logs || [];
   const isMarketOpen = data?.market_open ?? false;
   const isBotRunning = data?.bot_running ?? false;
@@ -414,7 +416,12 @@ export function App() {
           {/* Cột 2: Thanh tiến trình Sẵn Sàng Vào Lệnh & Checklist 4 Điều Kiện */}
           <div style={{ borderLeft: '1px solid rgba(255,255,255,0.08)', borderRight: '1px solid rgba(255,255,255,0.08)', padding: '0 20px' }}>
             <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '8px' }}>
-              <span style={{ fontSize: '12px', fontWeight: 700, color: '#CBD5E1' }}>ĐỘ SẴN SÀNG VÀO LỆNH (READINESS)</span>
+              <div style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
+                <span style={{ fontSize: '12px', fontWeight: 700, color: '#CBD5E1' }}>ĐỘ SẴN SÀNG VÀO LỆNH</span>
+                <span style={{ fontSize: '10px', color: '#10B981', display: 'flex', alignItems: 'center', gap: '3px', background: 'rgba(16, 185, 129, 0.1)', padding: '1px 6px', borderRadius: '4px', fontWeight: 600 }}>
+                  <Radio size={10} className="pulse-active" /> Real-Time
+                </span>
+              </div>
               <span className="mono" style={{ 
                 fontSize: '16px', fontWeight: 800, 
                 color: (prediction?.readiness_pct || 0) >= 80 ? '#10B981' : ((prediction?.readiness_pct || 0) >= 50 ? '#F59E0B' : '#94A3B8') 
@@ -499,122 +506,234 @@ export function App() {
         {/* 3. CENTER SPLIT GRID (Active Trades vs AI Analysis) */}
         <div style={{ display: 'grid', gridTemplateColumns: '1.8fr 1.2fr', gap: '20px', marginBottom: '24px' }}>
           
-          {/* LEFT: ACTIVE TRADES & MULTI-TIER SCALE-OUT MONITOR */}
+          {/* LEFT: ACTIVE TRADES & MULTI-TIER SCALE-OUT MONITOR & HISTORY TAB */}
           <div className="glass-panel" style={{ padding: '24px', display: 'flex', flexDirection: 'column' }}>
             
+            {/* Header với Tab Navigation Chuyển Đổi Vị Thế Đang Mở vs Lịch Sử */}
             <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '18px' }}>
-              <div style={{ display: 'flex', alignItems: 'center', gap: '10px' }}>
-                <Layers size={18} style={{ color: '#F59E0B' }} />
-                <h3 style={{ fontSize: '16px', fontWeight: 700 }}>Vị Thế Đang Mở & Quản Trị Đa Mục Tiêu</h3>
-                <span style={{ 
-                  background: 'rgba(255,255,255,0.06)', padding: '2px 8px', 
-                  borderRadius: '12px', fontSize: '12px', color: '#94A3B8' 
-                }}>{positions.length} Lệnh</span>
+              <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+                <button
+                  onClick={() => setActiveTab('active')}
+                  style={{
+                    display: 'flex', alignItems: 'center', gap: '8px',
+                    padding: '8px 16px', borderRadius: '8px',
+                    background: activeTab === 'active' ? 'rgba(245, 158, 11, 0.2)' : 'rgba(255, 255, 255, 0.04)',
+                    color: activeTab === 'active' ? '#F59E0B' : '#94A3B8',
+                    border: `1px solid ${activeTab === 'active' ? 'rgba(245, 158, 11, 0.4)' : 'transparent'}`,
+                    fontWeight: 700, fontSize: '13px', cursor: 'pointer',
+                    transition: 'all 0.2s ease'
+                  }}
+                >
+                  <Layers size={16} />
+                  <span>Vị Thế Đang Mở ({positions.length})</span>
+                </button>
+
+                <button
+                  onClick={() => setActiveTab('history')}
+                  style={{
+                    display: 'flex', alignItems: 'center', gap: '8px',
+                    padding: '8px 16px', borderRadius: '8px',
+                    background: activeTab === 'history' ? 'rgba(59, 130, 246, 0.2)' : 'rgba(255, 255, 255, 0.04)',
+                    color: activeTab === 'history' ? '#60A5FA' : '#94A3B8',
+                    border: `1px solid ${activeTab === 'history' ? 'rgba(59, 130, 246, 0.4)' : 'transparent'}`,
+                    fontWeight: 700, fontSize: '13px', cursor: 'pointer',
+                    transition: 'all 0.2s ease'
+                  }}
+                >
+                  <History size={16} />
+                  <span>Lịch Sử Lệnh Đã Chốt ({history.length})</span>
+                </button>
               </div>
 
-              {/* 3-Tier Multi-Target Quick Badges */}
-              <div style={{ display: 'flex', gap: '6px' }}>
-                <span style={{ fontSize: '11px', background: 'rgba(16, 185, 129, 0.1)', color: '#10B981', border: '1px solid rgba(16, 185, 129, 0.25)', padding: '3px 8px', borderRadius: '6px' }}>
-                  T1: 12p
-                </span>
-                <span style={{ fontSize: '11px', background: 'rgba(59, 130, 246, 0.1)', color: '#3B82F6', border: '1px solid rgba(59, 130, 246, 0.25)', padding: '3px 8px', borderRadius: '6px' }}>
-                  T2: 22p
-                </span>
-                <span style={{ fontSize: '11px', background: 'rgba(245, 158, 11, 0.1)', color: '#F59E0B', border: '1px solid rgba(245, 158, 11, 0.25)', padding: '3px 8px', borderRadius: '6px' }}>
-                  T3: 35p Runner
-                </span>
-              </div>
+              {/* Sub-Badges hoặc Tổng PnL */}
+              {activeTab === 'active' ? (
+                <div style={{ display: 'flex', gap: '6px' }}>
+                  <span style={{ fontSize: '11px', background: 'rgba(16, 185, 129, 0.1)', color: '#10B981', border: '1px solid rgba(16, 185, 129, 0.25)', padding: '3px 8px', borderRadius: '6px' }}>
+                    T1: 12p
+                  </span>
+                  <span style={{ fontSize: '11px', background: 'rgba(59, 130, 246, 0.1)', color: '#3B82F6', border: '1px solid rgba(59, 130, 246, 0.25)', padding: '3px 8px', borderRadius: '6px' }}>
+                    T2: 22p
+                  </span>
+                  <span style={{ fontSize: '11px', background: 'rgba(245, 158, 11, 0.1)', color: '#F59E0B', border: '1px solid rgba(245, 158, 11, 0.25)', padding: '3px 8px', borderRadius: '6px' }}>
+                    T3: 35p Runner
+                  </span>
+                </div>
+              ) : (
+                <div style={{ display: 'flex', alignItems: 'center', gap: '10px', fontSize: '12px' }}>
+                  <span style={{ color: '#94A3B8' }}>Tổng PnL đã chốt:</span>
+                  <strong className="mono" style={{ 
+                    color: history.reduce((sum, h) => sum + (h.profit || 0), 0) >= 0 ? '#10B981' : '#EF4444',
+                    fontWeight: 800, fontSize: '13px'
+                  }}>
+                    {history.reduce((sum, h) => sum + (h.profit || 0), 0) >= 0 ? '+' : ''}
+                    {history.reduce((sum, h) => sum + (h.profit || 0), 0).toFixed(2)} USD
+                  </strong>
+                </div>
+              )}
             </div>
 
-            {/* Active Trades Table */}
-            {positions.length === 0 ? (
-              <div style={{ 
-                flex: 1, display: 'flex', flexDirection: 'column', 
-                alignItems: 'center', justifyContent: 'center', 
-                minHeight: '220px', color: '#64748B', gap: '10px' 
-              }}>
-                <CheckCircle2 size={36} style={{ opacity: 0.4 }} />
-                <p style={{ fontSize: '14px' }}>Hiện không có vị thế nào đang mở</p>
-                <span style={{ fontSize: '12px', color: '#475569' }}>
-                  Bot sẽ tự động mở cụm 3 lệnh khi hội tụ đủ 4 chiến thuật và AI duyệt xác suất thắng &ge; 78%
-                </span>
-              </div>
-            ) : (
-              <div style={{ overflowX: 'auto' }}>
-                <table style={{ width: '100%', borderCollapse: 'collapse', textAlign: 'left', fontSize: '12px' }}>
-                  <thead>
-                    <tr style={{ color: '#64748B', borderBottom: '1px solid rgba(255,255,255,0.06)' }}>
-                      <th style={{ padding: '10px 8px' }}>MÃ LỆNH</th>
-                      <th style={{ padding: '10px 8px' }}>LOẠI</th>
-                      <th style={{ padding: '10px 8px' }}>LOT</th>
-                      <th style={{ padding: '10px 8px' }}>GIÁ VÀO</th>
-                      <th style={{ padding: '10px 8px' }}>GIÁ HIỆN TẠI</th>
-                      <th style={{ padding: '10px 8px' }}>SL / TP</th>
-                      <th style={{ padding: '10px 8px' }}>TRẠNG THÁI</th>
-                      <th style={{ padding: '10px 8px', textAlign: 'right' }}>LỢI NHUẬN</th>
-                      <th style={{ padding: '10px 8px', textAlign: 'center' }}>XỬ LÝ</th>
-                    </tr>
-                  </thead>
-                  <tbody>
-                    {positions.map((pos) => {
-                      const isBuy = pos.type === 'BUY';
-                      const isPositive = pos.profit >= 0;
-                      return (
-                        <tr key={pos.ticket} style={{ borderBottom: '1px solid rgba(255,255,255,0.04)' }}>
-                          <td className="mono" style={{ padding: '12px 8px', color: '#CBD5E1' }}>#{pos.ticket}</td>
-                          <td style={{ padding: '12px 8px' }}>
-                            <span style={{ 
-                              padding: '2px 8px', borderRadius: '4px', fontWeight: 700, fontSize: '11px',
-                              background: isBuy ? 'rgba(16, 185, 129, 0.15)' : 'rgba(239, 68, 68, 0.15)',
-                              color: isBuy ? '#10B981' : '#EF4444'
-                            }}>
-                              {pos.type}
-                            </span>
-                          </td>
-                          <td className="mono" style={{ padding: '12px 8px', fontWeight: 600 }}>{pos.volume}</td>
-                          <td className="mono" style={{ padding: '12px 8px' }}>{pos.entry_price.toFixed(2)}</td>
-                          <td className="mono" style={{ padding: '12px 8px' }}>{pos.current_price.toFixed(2)}</td>
-                          <td className="mono" style={{ padding: '12px 8px', fontSize: '11px', color: '#94A3B8' }}>
-                            {pos.sl.toFixed(2)} / {pos.tp.toFixed(2)}
-                          </td>
-                          <td style={{ padding: '12px 8px' }}>
-                            {pos.is_breakeven ? (
+            {/* TAB 1: BẢNG VỊ THẾ ĐANG MỞ */}
+            {activeTab === 'active' && (
+              positions.length === 0 ? (
+                <div style={{ 
+                  flex: 1, display: 'flex', flexDirection: 'column', 
+                  alignItems: 'center', justifyContent: 'center', 
+                  minHeight: '220px', color: '#64748B', gap: '10px' 
+                }}>
+                  <CheckCircle2 size={36} style={{ opacity: 0.4 }} />
+                  <p style={{ fontSize: '14px' }}>Hiện không có vị thế nào đang mở</p>
+                  <span style={{ fontSize: '12px', color: '#475569' }}>
+                    Bot sẽ tự động mở cụm 3 lệnh khi hội tụ đủ 4 chiến thuật và AI duyệt xác suất thắng &ge; 78%
+                  </span>
+                </div>
+              ) : (
+                <div style={{ overflowX: 'auto' }}>
+                  <table style={{ width: '100%', borderCollapse: 'collapse', textAlign: 'left', fontSize: '12px' }}>
+                    <thead>
+                      <tr style={{ color: '#64748B', borderBottom: '1px solid rgba(255,255,255,0.06)' }}>
+                        <th style={{ padding: '10px 8px' }}>MÃ LỆNH</th>
+                        <th style={{ padding: '10px 8px' }}>LOẠI</th>
+                        <th style={{ padding: '10px 8px' }}>LOT</th>
+                        <th style={{ padding: '10px 8px' }}>GIÁ VÀO</th>
+                        <th style={{ padding: '10px 8px' }}>GIÁ HIỆN TẠI</th>
+                        <th style={{ padding: '10px 8px' }}>SL / TP</th>
+                        <th style={{ padding: '10px 8px' }}>TRẠNG THÁI</th>
+                        <th style={{ padding: '10px 8px', textAlign: 'right' }}>LỢI NHUẬN</th>
+                        <th style={{ padding: '10px 8px', textAlign: 'center' }}>XỬ LÝ</th>
+                      </tr>
+                    </thead>
+                    <tbody>
+                      {positions.map((pos) => {
+                        const isBuy = pos.type === 'BUY';
+                        const isPositive = pos.profit >= 0;
+                        return (
+                          <tr key={pos.ticket} style={{ borderBottom: '1px solid rgba(255,255,255,0.04)' }}>
+                            <td className="mono" style={{ padding: '12px 8px', color: '#CBD5E1' }}>#{pos.ticket}</td>
+                            <td style={{ padding: '12px 8px' }}>
                               <span style={{ 
-                                display: 'inline-flex', alignItems: 'center', gap: '4px',
-                                background: 'rgba(16, 185, 129, 0.15)', color: '#10B981',
-                                padding: '2px 6px', borderRadius: '4px', fontSize: '10px', fontWeight: 700 
+                                padding: '2px 8px', borderRadius: '4px', fontWeight: 700, fontSize: '11px',
+                                background: isBuy ? 'rgba(16, 185, 129, 0.15)' : 'rgba(239, 68, 68, 0.15)',
+                                color: isBuy ? '#10B981' : '#EF4444'
                               }}>
-                                <Shield size={10} /> ĐÃ KHÓA LÃI BE
+                                {pos.type}
                               </span>
-                            ) : (
-                              <span style={{ color: '#64748B', fontSize: '11px' }}>Đang gồng</span>
-                            )}
-                          </td>
-                          <td className="mono" style={{ 
-                            padding: '12px 8px', textAlign: 'right', fontWeight: 700,
-                            color: isPositive ? '#10B981' : '#EF4444' 
-                          }}>
-                            {pos.profit > 0 ? `+${pos.profit.toFixed(2)}` : pos.profit.toFixed(2)} USD
-                          </td>
-                          <td style={{ padding: '12px 8px', textAlign: 'center' }}>
-                            <button
-                              onClick={() => handleCloseSingle(pos.ticket)}
-                              title="Đóng lệnh này"
-                              style={{
-                                background: 'rgba(239, 68, 68, 0.15)', border: 'none',
-                                color: '#EF4444', padding: '4px 8px', borderRadius: '6px',
-                                cursor: 'pointer', display: 'inline-flex', alignItems: 'center'
-                              }}
-                            >
-                              <X size={13} />
-                            </button>
-                          </td>
-                        </tr>
-                      );
-                    })}
-                  </tbody>
-                </table>
-              </div>
+                            </td>
+                            <td className="mono" style={{ padding: '12px 8px', fontWeight: 600 }}>{pos.volume}</td>
+                            <td className="mono" style={{ padding: '12px 8px' }}>{pos.entry_price.toFixed(2)}</td>
+                            <td className="mono" style={{ padding: '12px 8px' }}>{pos.current_price.toFixed(2)}</td>
+                            <td className="mono" style={{ padding: '12px 8px', fontSize: '11px', color: '#94A3B8' }}>
+                              {pos.sl.toFixed(2)} / {pos.tp.toFixed(2)}
+                            </td>
+                            <td style={{ padding: '12px 8px' }}>
+                              {pos.is_breakeven ? (
+                                <span style={{ 
+                                  display: 'inline-flex', alignItems: 'center', gap: '4px',
+                                  background: 'rgba(16, 185, 129, 0.15)', color: '#10B981',
+                                  padding: '2px 6px', borderRadius: '4px', fontSize: '10px', fontWeight: 700 
+                                }}>
+                                  <Shield size={10} /> ĐÃ KHÓA LÃI BE
+                                </span>
+                              ) : (
+                                <span style={{ color: '#64748B', fontSize: '11px' }}>Đang gồng</span>
+                              )}
+                            </td>
+                            <td className="mono" style={{ 
+                              padding: '12px 8px', textAlign: 'right', fontWeight: 700,
+                              color: isPositive ? '#10B981' : '#EF4444' 
+                            }}>
+                              {pos.profit > 0 ? `+${pos.profit.toFixed(2)}` : pos.profit.toFixed(2)} USD
+                            </td>
+                            <td style={{ padding: '12px 8px', textAlign: 'center' }}>
+                              <button
+                                onClick={() => handleCloseSingle(pos.ticket)}
+                                title="Đóng lệnh này"
+                                style={{
+                                  background: 'rgba(239, 68, 68, 0.15)', border: 'none',
+                                  color: '#EF4444', padding: '4px 8px', borderRadius: '6px',
+                                  cursor: 'pointer', display: 'inline-flex', alignItems: 'center'
+                                }}
+                              >
+                                <X size={13} />
+                              </button>
+                            </td>
+                          </tr>
+                        );
+                      })}
+                    </tbody>
+                  </table>
+                </div>
+              )
+            )}
+
+            {/* TAB 2: BẢNG LỊCH SỬ LỆNH ĐÃ CHỐT (TRADE HISTORY) */}
+            {activeTab === 'history' && (
+              history.length === 0 ? (
+                <div style={{ 
+                  flex: 1, display: 'flex', flexDirection: 'column', 
+                  alignItems: 'center', justifyContent: 'center', 
+                  minHeight: '220px', color: '#64748B', gap: '10px' 
+                }}>
+                  <History size={36} style={{ opacity: 0.4 }} />
+                  <p style={{ fontSize: '14px' }}>Chưa có lệnh nào đã chốt trong phiên này</p>
+                  <span style={{ fontSize: '12px', color: '#475569' }}>
+                    Các lệnh chốt lời (TP1/TP2/TP3), hòa vốn Breakeven hoặc cắt lỗ sẽ tự động lưu lại tại đây theo thời gian thực
+                  </span>
+                </div>
+              ) : (
+                <div style={{ overflowX: 'auto' }}>
+                  <table style={{ width: '100%', borderCollapse: 'collapse', textAlign: 'left', fontSize: '12px' }}>
+                    <thead>
+                      <tr style={{ color: '#64748B', borderBottom: '1px solid rgba(255,255,255,0.06)' }}>
+                        <th style={{ padding: '10px 8px' }}>MÃ LỆNH</th>
+                        <th style={{ padding: '10px 8px' }}>LOẠI</th>
+                        <th style={{ padding: '10px 8px' }}>LOT</th>
+                        <th style={{ padding: '10px 8px' }}>GIÁ ĐÓNG</th>
+                        <th style={{ padding: '10px 8px' }}>THỜI GIAN</th>
+                        <th style={{ padding: '10px 8px' }}>LÝ DO / GHI CHÚ</th>
+                        <th style={{ padding: '10px 8px', textAlign: 'right' }}>LỢI NHUẬN</th>
+                      </tr>
+                    </thead>
+                    <tbody>
+                      {history.map((h, idx) => {
+                        const isBuy = h.type === 'BUY';
+                        const isPositive = h.profit >= 0;
+                        return (
+                          <tr key={h.ticket || idx} style={{ borderBottom: '1px solid rgba(255,255,255,0.04)' }}>
+                            <td className="mono" style={{ padding: '12px 8px', color: '#CBD5E1' }}>#{h.ticket}</td>
+                            <td style={{ padding: '12px 8px' }}>
+                              <span style={{ 
+                                padding: '2px 8px', borderRadius: '4px', fontWeight: 700, fontSize: '11px',
+                                background: isBuy ? 'rgba(16, 185, 129, 0.15)' : 'rgba(239, 68, 68, 0.15)',
+                                color: isBuy ? '#10B981' : '#EF4444'
+                              }}>
+                                {h.type}
+                              </span>
+                            </td>
+                            <td className="mono" style={{ padding: '12px 8px', fontWeight: 600 }}>{h.volume}</td>
+                            <td className="mono" style={{ padding: '12px 8px' }}>{h.price.toFixed(2)}</td>
+                            <td className="mono" style={{ padding: '12px 8px', color: '#94A3B8', fontSize: '11px' }}>{h.close_time}</td>
+                            <td style={{ padding: '12px 8px', color: '#CBD5E1', fontSize: '11px' }}>
+                              <span style={{ 
+                                padding: '2px 8px', borderRadius: '4px', 
+                                background: isPositive ? 'rgba(16, 185, 129, 0.1)' : 'rgba(239, 68, 68, 0.1)',
+                                color: isPositive ? '#34D399' : '#F87171'
+                              }}>
+                                {h.comment || (isPositive ? "Chốt Lời TP" : "Cắt Lỗ SL")}
+                              </span>
+                            </td>
+                            <td className="mono" style={{ 
+                              padding: '12px 8px', textAlign: 'right', fontWeight: 700,
+                              color: isPositive ? '#10B981' : '#EF4444' 
+                            }}>
+                              {h.profit > 0 ? `+${h.profit.toFixed(2)}` : h.profit.toFixed(2)} USD
+                            </td>
+                          </tr>
+                        );
+                      })}
+                    </tbody>
+                  </table>
+                </div>
+              )
             )}
 
           </div>
@@ -628,7 +747,16 @@ export function App() {
                 <BarChart2 size={18} style={{ color: '#3B82F6' }} />
                 <h3 style={{ fontSize: '16px', fontWeight: 700 }}>Trí Tuệ Nhân Tạo & Đa Chiến Thuật</h3>
               </div>
-              <span style={{ fontSize: '11px', color: '#94A3B8' }}>Khung M5 XAUUSD</span>
+              <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+                <span style={{ 
+                  fontSize: '10px', color: '#10B981', display: 'flex', alignItems: 'center', gap: '4px', 
+                  background: 'rgba(16, 185, 129, 0.12)', border: '1px solid rgba(16, 185, 129, 0.25)', 
+                  padding: '2px 8px', borderRadius: '6px', fontWeight: 600 
+                }}>
+                  <Radio size={11} className="pulse-active" /> Live Theo Giây
+                </span>
+                <span style={{ fontSize: '11px', color: '#94A3B8' }}>Khung M5</span>
+              </div>
             </div>
 
             {/* AI Confidence Gauge */}

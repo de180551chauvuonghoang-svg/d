@@ -70,6 +70,20 @@ export interface TradePrediction {
   };
 }
 
+export interface ClosedTrade {
+  ticket: number;
+  deal_id?: number;
+  symbol: string;
+  type: 'BUY' | 'SELL';
+  volume: number;
+  entry_price?: number;
+  price: number;
+  profit: number;
+  profit_points?: number;
+  close_time: string;
+  comment: string;
+}
+
 export interface WebSocketPayload {
   timestamp: string;
   bot_running: boolean;
@@ -78,8 +92,10 @@ export interface WebSocketPayload {
   account: AccountInfo;
   ticker: MarketTicker;
   positions: OpenPosition[];
+  history?: ClosedTrade[];
   analysis: AIAnalysis;
   prediction?: TradePrediction;
   logs: SystemLog[];
 }
+
 

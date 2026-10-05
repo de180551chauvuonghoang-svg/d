@@ -68,6 +68,9 @@ class SystemState:
         }
         self.connected_websockets: List[WebSocket] = []
         self.bot_thread: Optional[threading.Thread] = None
+        self.last_feature_row: Optional[pd.DataFrame] = None
+        self.closed_trades: List[Dict[str, Any]] = []
+        self.known_positions: Dict[int, Any] = {}
 
     def add_log(self, level: str, message: str):
         now_str = datetime.datetime.now().strftime("%H:%M:%S")
@@ -77,6 +80,41 @@ class SystemState:
             self.logs.pop()
 
 state = SystemState()
+
+def fetch_mt5_history_deals(limit: int = 50) -> List[Dict[str, Any]]:
+    """Lấy danh sách các lệnh đã chốt từ MT5 và bộ nhớ state thời gian thực"""
+    deals_list = []
+    try:
+        from_t = datetime.datetime.now() - datetime.timedelta(days=7)
+        to_t = datetime.datetime.now() + datetime.timedelta(days=1)
+        raw_deals = mt5.history_deals_get(from_t, to_t)
+        if raw_deals:
+            for d in raw_deals:
+                if not d.symbol:
+                    continue
+                # entry == 1 là deal chốt đóng lệnh (ENTRY_OUT)
+                if d.entry == 1 or d.profit != 0:
+                    trade_type = "BUY" if d.type == 1 else "SELL"
+                    deals_list.append({
+                        "ticket": d.order,
+                        "deal_id": d.ticket,
+                        "symbol": d.symbol,
+                        "type": trade_type,
+                        "volume": d.volume,
+                        "price": round(d.price, 2),
+                        "profit": round(d.profit, 2),
+                        "close_time": datetime.datetime.fromtimestamp(d.time).strftime("%H:%M:%S %d/%m"),
+                        "comment": d.comment or ("Chốt lời (TP)" if d.profit > 0 else "Cắt lỗ (SL)")
+                    })
+    except Exception:
+        pass
+
+    # Kết hợp các lệnh đóng được lưu trong bộ nhớ state
+    for ct in state.closed_trades:
+        if not any(d['ticket'] == ct['ticket'] for d in deals_list):
+            deals_list.append(ct)
+            
+    return list(reversed(deals_list))[:limit]
 
 # ----------------- KIỂM TRA THỊ TRƯỜNG THEO GIỜ VN -----------------
 def is_market_open_vn() -> tuple:
@@ -256,6 +294,7 @@ def bot_worker_loop():
                         prob_buy = float(state.ai.predict_confidence(feature_row, "BUY")[0]) if state.ai.buy_rf else 0.0
                         prob_sell = float(state.ai.predict_confidence(feature_row, "SELL")[0]) if state.ai.sell_rf else 0.0
                         
+                        state.last_feature_row = feature_row.copy()
                         state.latest_analysis = {
                             "time": str(last_bar['time']),
                             "rsi_7": round(float(last_bar.get('rsi_7', 50)), 1),
@@ -289,6 +328,27 @@ def bot_worker_loop():
                 state.latest_prediction = calculate_trade_prediction(
                     None, 0.0, 0.0, sym_info, len(open_positions), is_open
                 )
+
+            # Theo dõi tự động các lệnh đã đóng để đưa vào lịch sử giao dịch (History)
+            current_tickets = {p.ticket for p in open_positions}
+            for t_id, kp in list(state.known_positions.items()):
+                if t_id not in current_tickets:
+                    close_p = sym_info.bid if kp['type'] == 'BUY' else sym_info.ask if sym_info else kp['price']
+                    pnl = (close_p - kp['price']) * kp['lot'] * 100 if kp['type'] == 'BUY' else (kp['price'] - close_p) * kp['lot'] * 100
+                    state.closed_trades.insert(0, {
+                        "ticket": t_id,
+                        "deal_id": t_id,
+                        "symbol": config.SYMBOL,
+                        "type": kp['type'],
+                        "volume": kp['lot'],
+                        "entry_price": kp['price'],
+                        "price": round(close_p, 2),
+                        "profit": round(pnl, 2),
+                        "close_time": datetime.datetime.now().strftime("%H:%M:%S %d/%m"),
+                        "comment": kp.get('name', 'AI Scalper')
+                    })
+                    state.add_log("SUCCESS", f"Lệnh #{t_id} ({kp['type']} {kp['lot']} lot) đã đóng. PnL: {pnl:+.2f} USD")
+                    del state.known_positions[t_id]
                             
             time.sleep(3)
         except Exception as e:
@@ -313,6 +373,15 @@ def open_3tier_order(order_type: OrderType, price: float, sym_info):
         tp = round(price + (tp_pts * point), 2) if is_buy else round(price - (tp_pts * point), 2)
         ticket = state.broker.open_order(config.SYMBOL, order_type, lot, init_sl, tp, f"AI Scalper {name}")
         if ticket:
+            state.known_positions[ticket] = {
+                "ticket": ticket,
+                "name": name,
+                "type": order_type.value,
+                "lot": lot,
+                "price": price,
+                "sl": init_sl,
+                "tp": tp
+            }
             state.add_log("SUCCESS", f"Khớp lệnh {name}: {order_type.value} {lot} lot tại {price:.2f} (Vé #{ticket})")
 
 # ----------------- KHỞI TẠO HỆ THỐNG KHI SERVER KHỞI CHẠY -----------------
@@ -456,6 +525,10 @@ def close_single_trade(ticket: int):
 def get_recent_logs():
     return state.logs
 
+@app.get("/api/trades/history")
+def get_trades_history():
+    return fetch_mt5_history_deals(50)
+
 # ----------------- REAL-TIME WEBSOCKET STREAM -----------------
 @app.websocket("/ws")
 async def websocket_endpoint(websocket: WebSocket):
@@ -477,9 +550,37 @@ async def websocket_endpoint(websocket: WebSocket):
             secs_remaining = max(0, 300 - secs_into_candle)
             bar_countdown_str = f"{secs_remaining // 60:02d}:{secs_remaining % 60:02d}"
 
+            # CẬP NHẬT CHỈ SỐ AI VÀ DỰ ĐOÁN VÀO LỆNH THEO TỪNG GIÂY (LIVE TICK)
+            if sym_info and state.last_feature_row is not None and not state.last_feature_row.empty:
+                cur_price = (sym_info.bid + sym_info.ask) / 2.0
+                live_row = state.last_feature_row.copy()
+                live_row['close'] = cur_price
+                if 'ema_50' in live_row.columns and live_row['ema_50'].iloc[0] > 0:
+                    live_row['dist_ema_50'] = (cur_price - live_row['ema_50'].iloc[0]) / cur_price
+                if 'ema_200' in live_row.columns and live_row['ema_200'].iloc[0] > 0:
+                    live_row['dist_ema_200'] = (cur_price - live_row['ema_200'].iloc[0]) / cur_price
+                if 'bb_upper' in live_row.columns and 'bb_lower' in live_row.columns:
+                    b_range = live_row['bb_upper'].iloc[0] - live_row['bb_lower'].iloc[0]
+                    if b_range > 0:
+                        live_row['bb_pct_b'] = (cur_price - live_row['bb_lower'].iloc[0]) / b_range
+                
+                if state.ai.buy_rf and state.ai.sell_rf:
+                    prob_buy_live = float(state.ai.predict_confidence(live_row, "BUY")[0])
+                    prob_sell_live = float(state.ai.predict_confidence(live_row, "SELL")[0])
+                    state.latest_analysis['prob_buy'] = round(prob_buy_live, 3)
+                    state.latest_analysis['prob_sell'] = round(prob_sell_live, 3)
+                    state.latest_analysis['bb_pct_b'] = round(float(live_row['bb_pct_b'].iloc[0]), 2)
+                    
+                    pred_live = calculate_trade_prediction(
+                        live_row.iloc[-1].to_dict(), prob_buy_live, prob_sell_live, sym_info, len(raw_pos), is_open
+                    )
+                    state.latest_prediction = pred_live
+
             pred_payload = dict(state.latest_prediction) if state.latest_prediction else {}
             pred_payload["bar_countdown"] = bar_countdown_str
             pred_payload["seconds_remaining"] = secs_remaining
+            
+            history_list = fetch_mt5_history_deals(30)
             
             positions_list = []
             for p in raw_pos:
@@ -522,6 +623,7 @@ async def websocket_endpoint(websocket: WebSocket):
                     "spread": sym_info.spread if sym_info else 0
                 },
                 "positions": positions_list,
+                "history": history_list,
                 "analysis": state.latest_analysis,
                 "prediction": pred_payload,
                 "logs": state.logs[:25]
